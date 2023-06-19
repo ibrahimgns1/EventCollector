@@ -7,6 +7,7 @@ import win32evtlogutil
 import win32security
 import codecs
 import json
+import time
 
 def sid_to_string(sid):
     if sid is None:
@@ -28,6 +29,8 @@ def getEventLogs(server, logtype, logPath, max_logs=None):
         flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
 
         log_count = 0
+        start_time = time.perf_counter_ns()
+
         while True:
             events_read = win32evtlog.ReadEventLog(hand, flags, 0)
             if not events_read:
@@ -45,6 +48,7 @@ def getEventLogs(server, logtype, logPath, max_logs=None):
                     'TimeGenerated': event.TimeGenerated.Format(),
                     'TimeWritten': event.TimeWritten.Format(),
                     'Message': win32evtlogutil.SafeFormatMessage(event, logtype)
+                    
                 }
                 events.append(event_dict)
 
@@ -57,11 +61,18 @@ def getEventLogs(server, logtype, logPath, max_logs=None):
             if max_logs and log_count >= max_logs:
                 break
         
-        # Print the total number of events saved
+        end_time = time.perf_counter_ns()
+        elapsed_time = end_time - start_time
+        elapsed_seconds = elapsed_time / 1_000_000_000
+        print(f"Time elapsed: {elapsed_seconds:.2f} seconds")
+
+        # Print the total number of events saved and the time elapsed
         if max_logs:
             print(f"Total events saved from {logtype} (filtered) = {log_count}")
         else:
             print(f"Total events in {logtype} = {total}")
+        
+        
 
     except:
         traceback.print_exc()
@@ -81,7 +92,6 @@ def getEventLogs(server, logtype, logPath, max_logs=None):
 
     # Close the event log handle
     win32evtlog.CloseEventLog(hand)
-
 
 
 if __name__ == "__main__":
