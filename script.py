@@ -72,6 +72,17 @@ def getEventLogs(server, logtype, logPath, max_logs=None):
 
     print(f"Log creation finished. Location of log is {logPath}")
 
+    # Clear the event log
+    try:
+        win32evtlog.ClearEventLog(hand, None)  # None = do not save backup
+        print(f"{logtype} log cleared successfully.")
+    except Exception as e:
+        print(f"Failed to clear {logtype} log: {e}")
+
+    # Close the event log handle
+    win32evtlog.CloseEventLog(hand)
+
+
 
 if __name__ == "__main__":
     # Example usage: python script.py "System,Application" "output_path" "fast"
