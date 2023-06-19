@@ -1,12 +1,10 @@
 import os
 import sys
-import time
 import traceback
 import win32con
 import win32evtlog
 import win32evtlogutil
 import win32security
-import winerror
 import codecs
 import json
 
@@ -19,30 +17,23 @@ def sid_to_string(sid):
         print(f"Failed to convert SID: {e}")
         return None
 
-def getAllEvents(server, logtypes, basePath):
-    if not server:
-        serverName = "localhost"
-    else:   
-        serverName = server
-    for logtype in logtypes:
-        path = os.path.join(basePath, f"{serverName}_{logtype}_log.json")
-        getEventLogs(server, logtype, path)
-
-def getEventLogs(server, logtype, logPath):
-    print("Logging %s events" % logtype)
+def getEventLogs(server, logtype, logPath, max_logs=None):
+    print(f"Logging {logtype} events")
     events = []
 
     try:
         hand = win32evtlog.OpenEventLog(server, logtype)
         total = win32evtlog.GetNumberOfEventLogRecords(hand)
-        print("Total events in %s = %s" % (logtype, total))
 
         flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
-        events_read = win32evtlog.ReadEventLog(hand, flags, 0)
 
-        while events_read:
+        log_count = 0
+        while True:
+            events_read = win32evtlog.ReadEventLog(hand, flags, 0)
+            if not events_read:
+                break
+            
             for event in events_read:
-                # Extract information from the event
                 event_dict = {
                     'LogName': logtype,
                     'RecordNumber': event.RecordNumber,
@@ -57,7 +48,20 @@ def getEventLogs(server, logtype, logPath):
                 }
                 events.append(event_dict)
 
-            events_read = win32evtlog.ReadEventLog(hand, flags, 0)
+                # Check max_logs for fast mode
+                log_count += 1
+                if max_logs and log_count >= max_logs:
+                    break
+            
+            # Break the outer loop if max_logs is reached
+            if max_logs and log_count >= max_logs:
+                break
+        
+        # Print the total number of events saved
+        if max_logs:
+            print(f"Total events saved from {logtype} (filtered) = {log_count}")
+        else:
+            print(f"Total events in {logtype} = {total}")
 
     except:
         traceback.print_exc()
@@ -66,11 +70,20 @@ def getEventLogs(server, logtype, logPath):
     with codecs.open(logPath, encoding='utf-8', mode='w') as log_file:
         json.dump(events, log_file, indent=4, ensure_ascii=False)
 
-    print("Log creation finished. Location of log is %s" % logPath)
+    print(f"Log creation finished. Location of log is {logPath}")
+
 
 if __name__ == "__main__":
+    # Example usage: python script.py "System,Application" "output_path" "fast"
+
+    # Parse arguments
+    selectedLogTypes = sys.argv[1].split(',')
+    outputPath = sys.argv[2]
+    mode = sys.argv[3]  # 'fast' or 'slow'
+
     server = None  # None = local machine
-    logTypes = ["System", "Application", "Security", "OneApp_IGCC","Setup","TaskScheduler","Windows Defender","Power Shell"]
+    max_logs = 100 if mode == 'fast' else None
+
     evt_dict = {
         win32con.EVENTLOG_AUDIT_FAILURE: 'EVENTLOG_AUDIT_FAILURE',
         win32con.EVENTLOG_AUDIT_SUCCESS: 'EVENTLOG_AUDIT_SUCCESS',
@@ -79,4 +92,6 @@ if __name__ == "__main__":
         win32con.EVENTLOG_ERROR_TYPE: 'EVENTLOG_ERROR_TYPE'
     }
 
-    getAllEvents(server, logTypes, "C:\\Users\\90539\\Desktop\\events")
+    for logtype in selectedLogTypes:
+        logPath = os.path.join(outputPath, f"{logtype}_log.json")
+        getEventLogs(server, logtype, logPath, max_logs)
