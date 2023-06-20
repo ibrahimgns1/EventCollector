@@ -1,0 +1,59 @@
+/* styles.css */
+
+body {
+    background-color: #f8f9fa;
+  }
+  
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  
+  .banner {
+    background-color: #343a40;
+    color: #fff;
+    padding: 1rem;
+  }
+  
+  h1 {
+    color: #fff;
+    text-align: center;
+  }
+  
+  .list-group-item {
+    background-color: #fff;
+    border: none;
+  }
+  
+  .card {
+    border: none;
+    box-shadow: 0 0.2rem 0.4rem rgba(0, 0, 0, 0.1);
+  }
+  
+  .card-title {
+    color: #343a40;
+    font-weight: 600;
+  }
+  
+  canvas {
+    max-width: 100%;
+  }
+  
+  .surprise-element {
+    background-color: #f8f9fa;
+    text-align: center;
+    padding: 2rem;
+    margin-top: 2rem;
+  }
+  
+  .surprise-element h3 {
+    color: #343a40;
+    font-size: 2rem;
+    margin-bottom: 1rem;
+  }
+  
+  .surprise-element p {
+    color: #6c757d;
+    font-size: 1.2rem;
+  }
+  
