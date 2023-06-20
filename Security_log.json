@@ -1,0 +1,14 @@
+[
+    {
+        "LogName": "Security",
+        "RecordNumber": 868831,
+        "EventID": 1102,
+        "EventType": "EVENTLOG_AUDIT_SUCCESS",
+        "SourceName": "Microsoft-Windows-Eventlog",
+        "ComputerName": "Ibrahim",
+        "Category": 104,
+        "TimeGenerated": "Tue Jun 20 08:17:54 2023",
+        "TimeWritten": "Tue Jun 20 08:17:54 2023",
+        "Message": "Denetim günlüğü temizlendi.\r\nKonu:\r\n\tGüvenlik Kimliği:\tS-1-5-21-1011186451-3814326419-3858724123-1001\r\n\tHesap Adı:\t90539\r\n\tEtki Alanı Adı:\tIBRAHIM\r\n\tOturum Açma Kimliği:\t0x652d3\r\n"
+    }
+]

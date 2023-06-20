@@ -1,0 +1,41 @@
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
+import matplotlib.pyplot as plt
+
+# Initialize Firebase
+cred = credentials.Certificate('fbdatabase.json')
+firebase_admin.initialize_app(cred)
+
+# Initialize Firestore
+db = firestore.client()
+
+# Read data from Firestore
+# Replace 'logs' with the name of your Firestore collection if different
+log_docs = db.collection('logs').stream()
+
+# Process the data
+# I am using the 'TimeGenerated' and 'RecordNumber' fields for this example.
+# You can adjust the fields and plotting method according to the structure and type of data you are dealing with.
+time_generated_values = []
+record_numbers = []
+
+for log_doc in log_docs:
+    log_data = log_doc.to_dict()
+    
+    # Assuming that 'Entries' is a map of entries, and each entry is a map with the fields you've mentioned
+    entries = log_data.get('Entries', {})
+    
+    for entry_key, entry_data in entries.items():
+        time_generated_values.append(entry_data['TimeGenerated'])
+        record_numbers.append(entry_data['RecordNumber'])
+
+# Visualize the data
+# For this example, I am just plotting the record numbers against the time they were generated.
+# This is just an example, please adjust it according to the specific visualization you need.
+plt.plot(time_generated_values, record_numbers)
+plt.xlabel('Time Generated')
+plt.ylabel('Record Number')
+plt.title('Your Data Visualization')
+plt.xticks(rotation=45)
+plt.show()

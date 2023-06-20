@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Log Statistics</title>
+    <link
+      rel="stylesheet"
+      href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+    />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <div class="container mt-5">
+      <div class="row">
+        <div class="col text-center">
+          <h1>Total Log Entries: {{ total_log_entries }}</h1>
+        </div>
+      </div>
+      <div class="row mt-5">
+        <div class="col-4">
+          <h3>Categories:</h3>
+          <ul class="list-group">
+            {% for category, count in log_counts.items() %}
+            <li
+              class="list-group-item d-flex justify-content-between align-items-center"
+            >
+              {{ category }}
+              <span class="badge badge-primary badge-pill">{{ count }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="col-8">
+          <div class="card">
+            <div class="card-body">
+              <h3 class="card-title text-center">Category Distribution:</h3>
+              <canvas id="pieChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row mt-5">
+        <div class="col">
+          <div class="card">
+            <div class="card-body">
+              <h3 class="card-title text-center">
+                Number of Entries by Category:
+              </h3>
+              <canvas id="barChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="totalLogEntries" hidden>{{ total_log_entries }}</div>
+    <div id="logCounts" hidden>{{ log_counts | tojson }}</div>
+    <script src="{{ url_for('static', filename='charts.js') }}"></script>
+  </body>
+</html>

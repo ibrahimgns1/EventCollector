@@ -83,12 +83,8 @@ def getEventLogs(server, logtype, logPath, max_logs=None):
 
     print(f"Log creation finished. Location of log is {logPath}")
 
-    # Clear the event log
-    try:
-        win32evtlog.ClearEventLog(hand, None)  # None = do not save backup
-        print(f"{logtype} log cleared successfully.")
-    except Exception as e:
-        print(f"Failed to clear {logtype} log: {e}")
+
+        
 
     # Close the event log handle
     win32evtlog.CloseEventLog(hand)
@@ -116,3 +112,18 @@ if __name__ == "__main__":
     for logtype in selectedLogTypes:
         logPath = os.path.join(outputPath, f"{logtype}_log.json")
         getEventLogs(server, logtype, logPath, max_logs)
+# Now, clear the logs
+    for logtype in selectedLogTypes:
+        # Open the event log
+        hand = win32evtlog.OpenEventLog(server, logtype)
+        # Try to clear the log and close the handle
+        try:
+            if win32evtlog.ClearEventLog(hand, None):
+                print(f"{logtype} log cleared successfully.")
+            else:
+                print(f"Failed to clear {logtype} log.")
+        except Exception as e:
+            print(f"Error while clearing {logtype} log: {str(e)}")
+        win32evtlog.CloseEventLog(hand)
+
+        
