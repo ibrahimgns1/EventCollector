@@ -5,6 +5,8 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from evtx import PyEvtxParser
 import time
+from collections import Counter
+
 log_types = {
     "System": "System.evtx",
     "Security": "Security.evtx",
@@ -15,148 +17,139 @@ log_types = {
     "TaskScheduler": "Microsoft-Windows-TaskScheduler%4Maintenance.evtx",
     "Windows Defender": "Microsoft-Windows-Windows Defender%4Operational.evtx"
 }
+
+xml_paths = {
+    "event_id": "./ns:System/ns:EventID",
+    "source_name": "./ns:System/ns:Provider",
+    "computer_name": "./ns:System/ns:Computer",
+    "channel": "./ns:System/ns:Channel",
+    "level": "./ns:System/ns:Level",
+    "event_data_1": "./ns:EventData/ns:Data",
+    "event_data_2": "./ns:UserData/*"
+}
+
 def sanitize_key(key):
-    # Replace characters that are not allowed in Firebase keys
     return key.replace('.', '-').replace('$', '').replace('#', '').replace('[', '').replace(']', '').replace('/', '').replace('{', '').replace('}', '').replace(':', '')
 
-
-def get_element_text(root, path, namespaces):
-    element = root.find(path, namespaces=namespaces)
+def get_element_text(root, path):
+    element = root.find(path)
     return element.text if element is not None else None
-def get_element_attribute(root, path, attribute_name, namespaces):
-    element = root.find(path, namespaces=namespaces)
+
+def get_element_attribute(root, path, attribute_name):
+    element = root.find(path)
     return element.get(attribute_name) if element is not None else None
 
-def get_event_data(root, namespaces):
+def get_event_data(root):
     event_data = {}
 
-    # Try the first XML structure
-    for data in root.findall("./ns:EventData/ns:Data", namespaces):
+    for data in root.findall(xml_paths["event_data_1"]):
         name = data.get('Name')
         value = data.text
         if name:
             event_data[name] = value.strip() if value else value
         else:
-            # If there is no name, treat it as the message
             event_data["Message"] = value.strip() if value else value
 
-    # Check if the event data is empty
     if not event_data:
-        # Try the second XML structure
-        for data in root.findall("./ns:UserData/*", namespaces):
+        for data in root.findall(xml_paths["event_data_2"]):
             event_data[data.tag] = data.text.strip() if data.text else data.text
 
     return event_data if event_data else None
 
-
-
-
-def get_element_level(root, path, namespaces):
-    element = root.find(path, namespaces=namespaces)
+def get_element_level(root):
+    element = root.find(xml_paths["level"])
     if element is not None:
-        if element.tag == "{http://schemas.microsoft.com/win/2004/08/events/event}Level":
-            level = element.text
-            if level == "1":
-                return "Critical"
-            elif level == "2":
-                return "Error"
-            elif level == "3":
-                return "Warning"
-            elif level == "4":
-                return "Information"
-            else:
-                return level
-        return element.text
+        level = element.text
+        if level in ["0", "4"]:
+            return "Information"
+        elif level == "1":
+            return "Critical"
+        elif level == "2":
+            return "Error"
+        elif level == "3":
+            return "Warning"
+        else:
+            return level
     return None
-
-
-
-
-
 
 def main():
     log_types_to_query = sys.argv[1].split(',')
-    
     output_directory = sys.argv[2]
     mode = sys.argv[3]
     time_after = sys.argv[4]
-
     max_records = 100 if mode == 'fast' else None
-
     time_after = datetime.strptime(time_after, "%d.%m.%Y %H:%M:%S")
-
-    
-
-    # XML namespace
     namespaces = {'ns': 'http://schemas.microsoft.com/win/2004/08/events/event'}
 
-    # Ensure the output directory exists
+    for key, path in xml_paths.items():
+        xml_paths[key] = path.replace("ns:", "{http://schemas.microsoft.com/win/2004/08/events/event}")
+
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
+
     start_time = time.time()
     total_logs = 0
-    # Iterate over log types
+
     for log_type in log_types_to_query:
         if log_type in log_types:
             log_file_path = os.path.join("C:\\Windows\\System32\\winevt\\Logs", log_types[log_type])
             if not os.path.exists(log_file_path):
                 continue
+
             parser = PyEvtxParser(log_file_path)
             event_logs = []
             record_count = 0
 
-            # Iterate over each event record
             for record in parser.records():
+                timestamp = record.get("timestamp")
+                record_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f %Z")
+                if record_time < time_after:
+                    continue
+
                 xml_data = record.get("data")
                 if xml_data:
-                    # Parse the XML data
                     root = ET.fromstring(xml_data)
-                    timestamp = record.get("timestamp")
 
-                    # Skip if before the specified time
-                    
-                    record_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f %Z")
-                    formatted_time = record_time.strftime("%d.%m.%Y %H:%M:%S")
-                    if record_time < time_after:
-                        continue
+                    event_id = get_element_text(root, xml_paths["event_id"])
+                    source_name = get_element_attribute(root, xml_paths["source_name"], 'Name')
+                    computer_name = get_element_text(root, xml_paths["computer_name"])
+                    channel = get_element_text(root, xml_paths["channel"])
+                    event_data = get_event_data(root)
+                    Level = get_element_level(root)
 
-                    # Extract information from the XML data using namespaces
-                    event_id = get_element_text(root, "./ns:System/ns:EventID", namespaces)
-                    source_name = get_element_attribute(root, "./ns:System/ns:Provider", 'Name', namespaces)
-                    computer_name = get_element_text(root, "./ns:System/ns:Computer", namespaces)
-                    channel = get_element_text(root, "./ns:System/ns:Channel", namespaces)
-                    event_data = get_event_data(root, namespaces)
-                    Level = get_element_level(root, "./ns:System/ns:Level",namespaces)
                     if event_data:
                         event_data = {sanitize_key(key): value for key, value in event_data.items()}
-                    # Construct the event dictionary
+
                     event = {
                         "LogName": channel,
                         "RecordNumber": record["event_record_id"],
                         "EventID": event_id,
                         "SourceName": source_name,
                         "ComputerName": computer_name,
-                        "TimeGenerated": formatted_time,
-                        "TimeWritten":formatted_time,
+                        "TimeGenerated": record_time.strftime("%d.%m.%Y %H:%M:%S"),
+                        "TimeWritten": record_time.strftime("%d.%m.%Y %H:%M:%S"),
                         "Message": event_data,
                         "Level": Level
                     }
+
                     event_logs.append(event)
 
                 record_count += 1
                 total_logs += 1
                 if max_records and record_count >= max_records:
                     break
+
             print(f"Collected {record_count} logs for {log_type}")
 
-            # Save the event logs as JSON
             output_file = os.path.join(output_directory, f"{log_type}.json")
             with open(output_file, 'w') as file:
                 json.dump(event_logs, file, indent=4)
 
             print(f"Event logs exported to {output_file}")
+
         else:
             print(f"Unknown log type: {log_type}")
+
     end_time = time.time()
     duration = end_time - start_time
     print(f"\nTotal logs collected: {total_logs}")
