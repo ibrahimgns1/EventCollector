@@ -28,7 +28,7 @@ def get_event_data(root, namespaces):
     event_data = {}
 
     # Try the first XML structure
-    for data in root.findall("./ns: /ns:Data", namespaces):
+    for data in root.findall("./ns:EventData/ns:Data", namespaces):
         name = data.get('Name')
         value = data.text
         if name:
@@ -44,6 +44,8 @@ def get_event_data(root, namespaces):
             event_data[data.tag] = data.text
 
     return event_data if event_data else None
+
+
 
 def get_element_level(root, path, namespaces):
     element = root.find(path, namespaces=namespaces)
@@ -69,7 +71,8 @@ def get_element_level(root, path, namespaces):
 
 
 def main():
-    log_types_to_query = eval(sys.argv[1])
+    log_types_to_query = sys.argv[1].split(',')
+    
     output_directory = sys.argv[2]
     mode = sys.argv[3]
     time_after = sys.argv[4]
