@@ -109,7 +109,7 @@ def main():
                     timestamp = record.get("timestamp")
 
                     # Skip if before the specified time
-                    record_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f %Z")
+                    record_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
 
                     if record_time < time_after:
                         continue
