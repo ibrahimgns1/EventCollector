@@ -1,129 +1,155 @@
 import os
 import sys
-import traceback
-import win32con
-import win32evtlog
-import win32evtlogutil
-import win32security
-import codecs
 import json
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from evtx import PyEvtxParser
 import time
+log_types = {
+    "System": "System.evtx",
+    "Security": "Security.evtx",
+    "Application": "Application.evtx",
+    "Windows PowerShell": "Windows PowerShell.evtx",
+    "OneApp_IGCC": "OneApp_IGCC.evtx",
+    "Setup": "Setup.evtx",
+    "TaskScheduler": "Microsoft-Windows-TaskScheduler%4Maintenance.evtx",
+    "Windows Defender": "Microsoft-Windows-Windows Defender%4Operational.evtx"
+}
 
-def sid_to_string(sid):
-    if sid is None:
-        return None
-    try:
-        return win32security.ConvertSidToStringSid(sid)
-    except Exception as e:
-        print(f"Failed to convert SID: {e}")
-        return None
 
-def getEventLogs(server, logtype, logPath, max_logs=None):
-    print(f"Logging {logtype} events")
-    events = []
+def get_element_text(root, path, namespaces):
+    element = root.find(path, namespaces=namespaces)
+    return element.text if element is not None else None
+def get_element_attribute(root, path, attribute_name, namespaces):
+    element = root.find(path, namespaces=namespaces)
+    return element.get(attribute_name) if element is not None else None
 
-    try:
-        hand = win32evtlog.OpenEventLog(server, logtype)
-        total = win32evtlog.GetNumberOfEventLogRecords(hand)
+def get_event_data(root, namespaces):
+    event_data = {}
 
-        flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
-
-        log_count = 0
-        start_time = time.perf_counter_ns()
-
-        while True:
-            events_read = win32evtlog.ReadEventLog(hand, flags, 0)
-            if not events_read:
-                break
-            
-            for event in events_read:
-                event_dict = {
-                    'LogName': logtype,
-                    'RecordNumber': event.RecordNumber,
-                    'EventID': event.EventID & 0x1FFFFFFF,
-                    'EventType': evt_dict.get(event.EventType, 'Unknown'),
-                    'SourceName': str(event.SourceName),
-                    'ComputerName': str(event.ComputerName),
-                    'Category': event.EventCategory,
-                    'TimeGenerated': event.TimeGenerated.Format(),
-                    'TimeWritten': event.TimeWritten.Format(),
-                    'Message': win32evtlogutil.SafeFormatMessage(event, logtype)
-                    
-                }
-                events.append(event_dict)
-
-                # Check max_logs for fast mode
-                log_count += 1
-                if max_logs and log_count >= max_logs:
-                    break
-            
-            # Break the outer loop if max_logs is reached
-            if max_logs and log_count >= max_logs:
-                break
-        
-        end_time = time.perf_counter_ns()
-        elapsed_time = end_time - start_time
-        elapsed_seconds = elapsed_time / 1_000_000_000
-        print(f"Time elapsed: {elapsed_seconds:.2f} seconds")
-
-        # Print the total number of events saved and the time elapsed
-        if max_logs:
-            print(f"Total events saved from {logtype} (filtered) = {log_count}")
+    # Try the first XML structure
+    for data in root.findall("./ns: /ns:Data", namespaces):
+        name = data.get('Name')
+        value = data.text
+        if name:
+            event_data[name] = value
         else:
-            print(f"Total events in {logtype} = {total}")
-        
-        
+            # If there is no name, treat it as the message
+            event_data["Message"] = value
 
-    except:
-        traceback.print_exc()
+    # Check if the event data is empty
+    if not event_data:
+        # Try the second XML structure
+        for data in root.findall("./ns:UserData/*", namespaces):
+            event_data[data.tag] = data.text
 
-    # Save events to a JSON file
-    with codecs.open(logPath, encoding='utf-8', mode='w') as log_file:
-        json.dump(events, log_file, indent=4, ensure_ascii=False)
+    return event_data if event_data else None
 
-    print(f"Log creation finished. Location of log is {logPath}")
+def get_element_level(root, path, namespaces):
+    element = root.find(path, namespaces=namespaces)
+    if element is not None:
+        if element.tag == "{http://schemas.microsoft.com/win/2004/08/events/event}Level":
+            level = element.text
+            if level == "1":
+                return "Critical"
+            elif level == "2":
+                return "Error"
+            elif level == "3":
+                return "Warning"
+            elif level == "4":
+                return "Information"
+            else:
+                return level
+        return element.text
+    return None
 
 
-        
 
-    # Close the event log handle
-    win32evtlog.CloseEventLog(hand)
 
+
+
+def main():
+    log_types_to_query = eval(sys.argv[1])
+    output_directory = sys.argv[2]
+    mode = sys.argv[3]
+    time_after = sys.argv[4]
+
+    max_records = 100 if mode == 'fast' else None
+    time_after = datetime.strptime(time_after, "%d.%m.%Y %H:%M:%S")
+
+    
+
+    # XML namespace
+    namespaces = {'ns': 'http://schemas.microsoft.com/win/2004/08/events/event'}
+
+    # Ensure the output directory exists
+    if not os.path.exists(output_directory):
+        os.makedirs(output_directory)
+    start_time = time.time()
+    total_logs = 0
+    # Iterate over log types
+    for log_type in log_types_to_query:
+        if log_type in log_types:
+            log_file_path = os.path.join("C:\\Windows\\System32\\winevt\\Logs", log_types[log_type])
+            if not os.path.exists(log_file_path):
+                continue
+            parser = PyEvtxParser(log_file_path)
+            event_logs = []
+            record_count = 0
+
+            # Iterate over each event record
+            for record in parser.records():
+                xml_data = record.get("data")
+                if xml_data:
+                    # Parse the XML data
+                    root = ET.fromstring(xml_data)
+                    timestamp = record.get("timestamp")
+
+                    # Skip if before the specified time
+                    record_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f %Z")
+
+                    if record_time < time_after:
+                        continue
+
+                    # Extract information from the XML data using namespaces
+                    event_id = get_element_text(root, "./ns:System/ns:EventID", namespaces)
+                    source_name = get_element_attribute(root, "./ns:System/ns:Provider", 'Name', namespaces)
+                    computer_name = get_element_text(root, "./ns:System/ns:Computer", namespaces)
+                    channel = get_element_text(root, "./ns:System/ns:Channel", namespaces)
+                    event_data = get_event_data(root, namespaces)
+                    Level = get_element_level(root, "./ns:System/ns:Level",namespaces)
+                    # Construct the event dictionary
+                    event = {
+                        "LogName": channel,
+                        "RecordNumber": record["event_record_id"],
+                        "EventID": event_id,
+                        "SourceName": source_name,
+                        "ComputerName": computer_name,
+                        "TimeGenerated": str(timestamp),
+                        "TimeWritten": str(timestamp),
+                        "Message": event_data,
+                        "Level": Level
+                    }
+                    event_logs.append(event)
+
+                record_count += 1
+                total_logs += 1
+                if max_records and record_count >= max_records:
+                    break
+            print(f"Collected {record_count} logs for {log_type}")
+
+            # Save the event logs as JSON
+            output_file = os.path.join(output_directory, f"{log_type}.json")
+            with open(output_file, 'w') as file:
+                json.dump(event_logs, file, indent=4)
+
+            print(f"Event logs exported to {output_file}")
+        else:
+            print(f"Unknown log type: {log_type}")
+    end_time = time.time()
+    duration = end_time - start_time
+    print(f"\nTotal logs collected: {total_logs}")
+    print(f"Total duration: {duration:.2f} seconds")
 
 if __name__ == "__main__":
-    # Example usage: python script.py "System,Application" "output_path" "fast"
-
-    # Parse arguments
-    selectedLogTypes = sys.argv[1].split(',')
-    outputPath = sys.argv[2]
-    mode = sys.argv[3]  # 'fast' or 'slow'
-
-    server = None  # None = local machine
-    max_logs = 100 if mode == 'fast' else None
-
-    evt_dict = {
-        win32con.EVENTLOG_AUDIT_FAILURE: 'EVENTLOG_AUDIT_FAILURE',
-        win32con.EVENTLOG_AUDIT_SUCCESS: 'EVENTLOG_AUDIT_SUCCESS',
-        win32con.EVENTLOG_INFORMATION_TYPE: 'EVENTLOG_INFORMATION_TYPE',
-        win32con.EVENTLOG_WARNING_TYPE: 'EVENTLOG_WARNING_TYPE',
-        win32con.EVENTLOG_ERROR_TYPE: 'EVENTLOG_ERROR_TYPE'
-    }
-
-    for logtype in selectedLogTypes:
-        logPath = os.path.join(outputPath, f"{logtype}_log.json")
-        getEventLogs(server, logtype, logPath, max_logs)
-# Now, clear the logs
-    for logtype in selectedLogTypes:
-        # Open the event log
-        hand = win32evtlog.OpenEventLog(server, logtype)
-        # Try to clear the log and close the handle
-        try:
-            if win32evtlog.ClearEventLog(hand, None):
-                print(f"{logtype} log cleared successfully.")
-            else:
-                print(f"Failed to clear {logtype} log.")
-        except Exception as e:
-            print(f"Error while clearing {logtype} log: {str(e)}")
-        win32evtlog.CloseEventLog(hand)
-
-        
+    main()
