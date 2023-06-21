@@ -32,18 +32,19 @@ def get_event_data(root, namespaces):
         name = data.get('Name')
         value = data.text
         if name:
-            event_data[name] = value
+            event_data[name] = value.strip() if value else value
         else:
             # If there is no name, treat it as the message
-            event_data["Message"] = value
+            event_data["Message"] = value.strip() if value else value
 
     # Check if the event data is empty
     if not event_data:
         # Try the second XML structure
         for data in root.findall("./ns:UserData/*", namespaces):
-            event_data[data.tag] = data.text
+            event_data[data.tag] = data.text.strip() if data.text else data.text
 
     return event_data if event_data else None
+
 
 
 
@@ -78,6 +79,7 @@ def main():
     time_after = sys.argv[4]
 
     max_records = 100 if mode == 'fast' else None
+
     time_after = datetime.strptime(time_after, "%d.%m.%Y %H:%M:%S")
 
     
@@ -109,8 +111,9 @@ def main():
                     timestamp = record.get("timestamp")
 
                     # Skip if before the specified time
-                    record_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-
+                    
+                    record_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f %Z")
+                    formatted_time = record_time.strftime("%d.%m.%Y %H:%M:%S")
                     if record_time < time_after:
                         continue
 
@@ -128,8 +131,8 @@ def main():
                         "EventID": event_id,
                         "SourceName": source_name,
                         "ComputerName": computer_name,
-                        "TimeGenerated": str(timestamp),
-                        "TimeWritten": str(timestamp),
+                        "TimeGenerated": formatted_time,
+                        "TimeWritten":formatted_time,
                         "Message": event_data,
                         "Level": Level
                     }
