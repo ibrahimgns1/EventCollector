@@ -15,6 +15,9 @@ log_types = {
     "TaskScheduler": "Microsoft-Windows-TaskScheduler%4Maintenance.evtx",
     "Windows Defender": "Microsoft-Windows-Windows Defender%4Operational.evtx"
 }
+def sanitize_key(key):
+    # Replace characters that are not allowed in Firebase keys
+    return key.replace('.', '-').replace('$', '').replace('#', '').replace('[', '').replace(']', '').replace('/', '').replace('{', '').replace('}', '').replace(':', '')
 
 
 def get_element_text(root, path, namespaces):
@@ -124,6 +127,8 @@ def main():
                     channel = get_element_text(root, "./ns:System/ns:Channel", namespaces)
                     event_data = get_event_data(root, namespaces)
                     Level = get_element_level(root, "./ns:System/ns:Level",namespaces)
+                    if event_data:
+                        event_data = {sanitize_key(key): value for key, value in event_data.items()}
                     # Construct the event dictionary
                     event = {
                         "LogName": channel,
